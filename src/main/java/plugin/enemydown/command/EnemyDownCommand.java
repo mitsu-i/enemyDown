@@ -1,6 +1,15 @@
 package plugin.enemydown.command;
 
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.SplittableRandom;
@@ -30,6 +39,8 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   public static final String HARD = "hard";
   public static final String EASY = "easy";
   public static final String NONE = "NONE";
+  public static final String LIST = "list";
+
   private Main main;
   private List<PlayerData> playerDataList = new ArrayList<>();
   private List<Entity> spawnEntityList = new ArrayList<>();
@@ -44,6 +55,34 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   @Override
   public boolean onExecutePlayerCommand(Player player, Command command, String label,
       String[] args) {
+    if (args.length == 1 && (LIST.equals(args[0]))) {
+      String url = "jdbc:mysql://localhost/spigot_server";
+      String user = "root";
+      String password = "Sdgosdgo11";
+      String sql = "select * from player_score";
+
+      try(Connection con = DriverManager.getConnection(url, user, password)) {
+        Statement statement = con.createStatement();
+        ResultSet resultset = statement.executeQuery(sql);
+        while(resultset.next()){
+          int id = resultset.getInt("id");
+          String name = resultset.getString("player_name");
+          int score = resultset.getInt("score");
+          String difficulty = resultset.getString("difficulty");
+          DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-mm-dd HH:mm:ss");
+          LocalDateTime date = LocalDateTime.parse(resultset.getString("registered_at"),
+              formatter);
+
+          player.sendMessage(id + " | " + score + " | " + difficulty  + " | " +date.format(formatter));
+        }
+
+
+      } catch (SQLException e) {
+        throw new RuntimeException(e);
+      }
+
+      return false;
+    }
     difficulty = getDifficulty(player, args);
     if (difficulty.equals(NONE)) {
       return false;
