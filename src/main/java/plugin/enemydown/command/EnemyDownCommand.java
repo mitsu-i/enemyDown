@@ -1,15 +1,7 @@
 package plugin.enemydown.command;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.Objects;
 import java.util.SplittableRandom;
@@ -30,7 +22,9 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.potion.PotionEffect;
 import plugin.enemydown.Main;
-import plugin.enemydown.data.PlayerData;
+import plugin.enemydown.PlayerScoreData;
+import plugin.enemydown.data.ExecutingPlayer;
+import plugin.enemydown.mapper.data.PlayerScore;
 
 public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Listener {
 
@@ -42,7 +36,8 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   public static final String LIST = "list";
 
   private Main main;
-  private List<PlayerData> playerDataList = new ArrayList<>();
+  private PlayerScoreData playerScoreData = new PlayerScoreData();
+  private List<ExecutingPlayer> executingPlayerList = new ArrayList<>();
   private List<Entity> spawnEntityList = new ArrayList<>();
   private int gameTime;
   private String difficulty;
@@ -56,38 +51,15 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   public boolean onExecutePlayerCommand(Player player, Command command, String label,
       String[] args) {
     if (args.length == 1 && (LIST.equals(args[0]))) {
-      String url = "jdbc:mysql://localhost/spigot_server";
-      String user = "root";
-      String password = "Sdgosdgo11";
-      String sql = "select * from player_score";
-
-      try(Connection con = DriverManager.getConnection(url, user, password)) {
-        Statement statement = con.createStatement();
-        ResultSet resultset = statement.executeQuery(sql);
-        while(resultset.next()){
-          int id = resultset.getInt("id");
-          String name = resultset.getString("player_name");
-          int score = resultset.getInt("score");
-          String difficulty = resultset.getString("difficulty");
-          DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-mm-dd HH:mm:ss");
-          LocalDateTime date = LocalDateTime.parse(resultset.getString("registered_at"),
-              formatter);
-
-          player.sendMessage(id + " | " + score + " | " + difficulty  + " | " +date.format(formatter));
-        }
-
-
-      } catch (SQLException e) {
-        throw new RuntimeException(e);
-      }
-
+      sendPlayerScoreList(player);
       return false;
     }
+
     difficulty = getDifficulty(player, args);
     if (difficulty.equals(NONE)) {
       return false;
     }
-    PlayerData nowPlayer = getPlayerScore(player);
+    ExecutingPlayer nowPlayer = getPlayerScore(player);
     gameTime = GAME_TIME;
     nowPlayer.setGameTime(GAME_TIME);
     nowPlayer.setScore(0);
@@ -100,6 +72,8 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
 
     return true;
   }
+
+
 
   /**
    * 難易度をコマンドから取得します。
@@ -129,27 +103,27 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
    * @param player 　コマンドを実行したプレイヤー
    * @return 現在、コマンドを実行しているプレイヤーの情報
    */
-  private PlayerData getPlayerScore(Player player) {
-    if (playerDataList.isEmpty()) {
+  private ExecutingPlayer getPlayerScore(Player player) {
+    if (executingPlayerList.isEmpty()) {
       return addNewPlayerData(player);
     } else {
-      for (PlayerData playerData : playerDataList) {
-        if (!playerData.getPlayerName().equals(player.getName())) {
+      for (ExecutingPlayer executingPlayer : executingPlayerList) {
+        if (!executingPlayer.getPlayerName().equals(player.getName())) {
           return addNewPlayerData(player);
         } else {
-          return playerData;
+          return executingPlayer;
         }
       }
     }
     return null;
   }
 
-  private PlayerData addNewPlayerData(Player player) {
-    PlayerData newPlayer = new PlayerData();
+  private ExecutingPlayer addNewPlayerData(Player player) {
+    ExecutingPlayer newPlayer = new ExecutingPlayer();
     //プレイヤーの名前を取得
     newPlayer.setPlayerName(player.getName());
     //プレイヤー情報をリストに追加
-    playerDataList.add(newPlayer);
+    executingPlayerList.add(newPlayer);
     return newPlayer;
   }
 
@@ -169,17 +143,18 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
       return;
     }
 
-    for (PlayerData playerData : playerDataList) {
-      if (playerData.getPlayerName().equals(player.getName())) {
+    for (ExecutingPlayer executingPlayer : executingPlayerList) {
+      if (executingPlayer.getPlayerName().equals(player.getName())) {
 
         switch (enemy.getType()) {
           case ZOMBIE -> point = 50;
           case SHEEP -> point = 20;
           case CHICKEN -> point = 10;
+          case ZOMBIE_HORSE -> point = 100;
         }
 
-        playerData.setScore(playerData.getScore() + point);
-        player.sendMessage("敵を倒した！　現在のスコアは" + playerData.getScore() + "点！");
+        executingPlayer.setScore(executingPlayer.getScore() + point);
+        player.sendMessage("敵を倒した！　現在のスコアは" + executingPlayer.getScore() + "点！");
       }
     }
   }
@@ -252,22 +227,31 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   /**
    * ゲームを実行します。想定の時間内に敵を倒すとスコアが追加されます。
    *
-   * @param player        　コマンドを実行したプレイヤー
-   * @param nowPlayerData 　プレイヤーのデータについて
+   * @param player             　コマンドを実行したプレイヤー
+   * @param nowExecutingPlayer 　プレイヤーのデータについて
    */
-  private void gamePlay(Player player, PlayerData nowPlayerData, String difficulty) {
+  private void gamePlay(Player player, ExecutingPlayer nowExecutingPlayer, String difficulty) {
     Bukkit.getScheduler().runTaskTimer(main, Runnable -> {
 
       if (gameTime <= 0) {
         Runnable.cancel();
-        player.sendTitle("ゲームが終了しました！", nowPlayerData.getPlayerName() +
-            " " + nowPlayerData.getScore() + "点！", 0, 30, 0);
+        player.sendTitle("ゲームが終了しました！", nowExecutingPlayer.getPlayerName() +
+            " " + nowExecutingPlayer.getScore() + "点！", 0, 30, 0);
+
+
 
         for (Entity enemy : spawnEntityList) {
           enemy.remove();
         }
         spawnEntityList.clear();
         removePotionEffect(player);
+
+
+        //スコア登録処理
+        playerScoreData.insert(new PlayerScore(nowExecutingPlayer.getPlayerName(),
+            nowExecutingPlayer.getScore(),
+            difficulty));
+
         return;
       }
 
@@ -288,6 +272,22 @@ public class EnemyDownCommand extends BaseCommand implements CommandExecutor, Li
   private static void removePotionEffect(Player player) {
     for (PotionEffect effect : player.getActivePotionEffects()) {
       player.removePotionEffect(effect.getType());
+    }
+  }
+
+  /**
+   * 現在登録されているスコアの一覧をメッセージに送る
+   * @param player
+   */
+  private void sendPlayerScoreList(Player player) {
+    List<PlayerScore> playerScoreList = playerScoreData.selectList();
+    for (PlayerScore playerScore : playerScoreList) {
+      player.sendMessage(
+          playerScore.getId() + " | "
+              + playerScore.getPlayerName() + " | "
+              + playerScore.getScore() + " | "
+              + playerScore.getDifficulty() + " | "
+              + playerScore.getRegisteredAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
     }
   }
 }
