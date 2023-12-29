@@ -20,7 +20,7 @@ repositories {
 }
 
 dependencies {
-    compileOnly "org.spigotmc:spigot-api:1.20.2-R0.1-SNAPSHOT"
+    implementation"org.spigotmc:spigot-api:1.20.2-R0.1-SNAPSHOT"
     implementation 'org.mybatis:mybatis:3.5.15'
 
 
@@ -29,6 +29,13 @@ dependencies {
 
     testCompileOnly 'org.projectlombok:lombok:1.18.26'
     testAnnotationProcessor 'org.projectlombok:lombok:1.18.26'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.9.2'
+    testImplementation 'org.mockito:mockito-core:3.+'
+}
+
+test {
+    useJUnitPlatform()
 }
 
 def targetJavaVersion = 17
